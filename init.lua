@@ -49,11 +49,14 @@ vim.opt.smartcase = true
 vim.opt.hlsearch = false
 vim.opt.incsearch = true
 
-vim.opt.updatetime = 300
+vim.opt.updatetime = 200
 vim.opt.timeoutlen = 300
 vim.opt.splitright = true
 vim.opt.splitbelow = true
+vim.opt.splitkeep = "screen"
 vim.opt.inccommand = "split"
+vim.opt.wrap = false
+vim.opt.confirm = true
 
 -- General keymaps ------------------------------------------------------------
 vim.keymap.set({ "n", "v" }, "<Space>", "<Nop>", { silent = true })
@@ -77,7 +80,6 @@ vim.keymap.set("n", "<leader>w", "<cmd>write<CR>", { desc = "Save file" })
 vim.keymap.set("n", "<leader>q", "<cmd>quit<CR>", { desc = "Quit window" })
 vim.keymap.set("n", "<leader>Q", "<cmd>quitall!<CR>", { desc = "Force quit all" })
 vim.keymap.set("n", "<leader>x", "<cmd>x<CR>", { desc = "Save and quit" })
-vim.keymap.set("n", "<leader>bd", "<cmd>bdelete<CR>", { desc = "Close buffer" })
 vim.keymap.set("n", "<leader>bD", "<cmd>bdelete!<CR>", { desc = "Force close buffer" })
 vim.keymap.set("n", "<leader>bn", "<cmd>bnext<CR>", { desc = "Next buffer" })
 vim.keymap.set("n", "<leader>bp", "<cmd>bprevious<CR>", { desc = "Previous buffer" })
@@ -647,9 +649,12 @@ require("lazy").setup({
         { "<leader>b", group = "Buffers" },
         { "<leader>c", group = "Code / LSP" },
         { "<leader>f", group = "Find / Telescope" },
+        { "<leader>g", group = "Git" },
         { "<leader>h", group = "Hunks / Gitsigns" },
         { "<leader>l", group = "LazyGit" },
         { "<leader>s", group = "Search / Todo" },
+        { "<leader>t", group = "Trouble / Terminal" },
+        { "<leader>u", group = "UI" },
         { "<leader>w", group = "Save" },
         { "<leader>q", group = "Quit" },
         { "<leader>Q", group = "Force quit all" },
@@ -676,6 +681,184 @@ require("lazy").setup({
     config = function()
       require("mini.pairs").setup()
     end,
+  },
+
+  --------------------------------------------------------------------------
+  -- Surround
+  --------------------------------------------------------------------------
+  {
+    "echasnovski/mini.surround",
+    version = false,
+    event = "VeryLazy",
+    config = function()
+      require("mini.surround").setup({
+        mappings = {
+          add = "ys",
+          delete = "ds",
+          replace = "cs",
+          find = "",
+          find_left = "",
+          highlight = "",
+          update_n_lines = "",
+          suffix_last = "",
+          suffix_next = "",
+        },
+        n_lines = 20,
+        search_method = "cover_or_next",
+      })
+      vim.keymap.set("x", "ys", "<cmd>lua MiniSurround.add('visual')<CR>")
+    end,
+  },
+
+  --------------------------------------------------------------------------
+  -- Comment
+  --------------------------------------------------------------------------
+  {
+    "echasnovski/mini.comment",
+    version = false,
+    event = "VeryLazy",
+    config = function()
+      require("ts_context_commentstring").setup({ enable_autocmd = false })
+      require("mini.comment").setup({
+        options = {
+          custom_commentstring = function()
+            return require("ts_context_commentstring.internal").calculate_commentstring() or vim.bo.commentstring
+          end,
+        },
+      })
+    end,
+    dependencies = { "JoosepAlviste/nvim-ts-context-commentstring" },
+  },
+
+  --------------------------------------------------------------------------
+  -- Trouble (diagnostics list)
+  --------------------------------------------------------------------------
+  {
+    "folke/trouble.nvim",
+    cmd = "Trouble",
+    keys = {
+      { "<leader>tt", "<cmd>Trouble diagnostics toggle<CR>", desc = "Diagnostics (Trouble)" },
+      { "<leader>tT", "<cmd>Trouble diagnostics toggle filter.buf=0<CR>", desc = "Buffer diagnostics (Trouble)" },
+      { "<leader>ts", "<cmd>Trouble symbols toggle focus=false<CR>", desc = "Symbols (Trouble)" },
+      { "<leader>tl", "<cmd>Trouble lsp toggle focus=false win.position=right<CR>", desc = "LSP definitions/references (Trouble)" },
+      { "<leader>tL", "<cmd>Trouble loclist toggle<CR>", desc = "Location list (Trouble)" },
+      { "<leader>tQ", "<cmd>Trouble qflist toggle<CR>", desc = "Quickfix list (Trouble)" },
+      {
+        "[T",
+        function() require("trouble").prev({ skip_groups = true, jump = true }) end,
+        desc = "Previous trouble item",
+      },
+      {
+        "]T",
+        function() require("trouble").next({ skip_groups = true, jump = true }) end,
+        desc = "Next trouble item",
+      },
+    },
+    opts = {
+      auto_close = false,
+      auto_open = false,
+      auto_preview = true,
+      auto_fold = false,
+      use_diagnostic_signs = true,
+    },
+  },
+
+  --------------------------------------------------------------------------
+  -- Oil (edit directories as buffers)
+  --------------------------------------------------------------------------
+  {
+    "stevearc/oil.nvim",
+    cmd = "Oil",
+    keys = {
+      { "-", "<cmd>Oil<CR>", desc = "Open parent directory (Oil)" },
+      { "<leader>-", "<cmd>Oil --float<CR>", desc = "Open parent directory floating (Oil)" },
+    },
+    opts = {
+      default_file_explorer = true,
+      delete_to_trash = true,
+      skip_confirm_for_simple_edits = true,
+      view_options = {
+        show_hidden = true,
+        natural_order = true,
+        is_always_hidden = function(name, _)
+          return name == ".." or name == ".git"
+        end,
+      },
+      float = {
+        padding = 2,
+        max_width = 80,
+        max_height = 30,
+      },
+      win_options = {
+        wrap = true,
+      },
+    },
+    dependencies = { "nvim-tree/nvim-web-devicons" },
+  },
+
+  --------------------------------------------------------------------------
+  -- Snacks (notifications, indentation, bigfile, etc.)
+  --------------------------------------------------------------------------
+  {
+    "folke/snacks.nvim",
+    priority = 1000,
+    lazy = false,
+    opts = {
+      bigfile = { enabled = true },
+      indent = { enabled = true },
+      input = { enabled = true },
+      notifier = { enabled = true, timeout = 3000 },
+      quickfile = { enabled = true },
+      scroll = { enabled = true },
+      statuscolumn = { enabled = true },
+      words = { enabled = true },
+      terminal = {
+        enabled = true,
+        win = { style = "minimal" },
+      },
+    },
+    keys = {
+      {
+        "<leader>un",
+        function() Snacks.notifier.hide() end,
+        desc = "Dismiss all notifications",
+      },
+      {
+        "<leader>gg",
+        function() Snacks.lazygit() end,
+        desc = "LazyGit (Snacks)",
+      },
+      {
+        "<leader>gb",
+        function() Snacks.git.blame_line() end,
+        desc = "Git blame line (Snacks)",
+      },
+      {
+        "<leader>gB",
+        function() Snacks.gitbrowse() end,
+        desc = "Git browse (Snacks)",
+      },
+      {
+        "<leader>tf",
+        function() Snacks.terminal.toggle() end,
+        desc = "Toggle terminal",
+      },
+      {
+        "<leader>.",
+        function() Snacks.scratch() end,
+        desc = "Scratch buffer",
+      },
+      {
+        "<leader>bd",
+        function() Snacks.bufdelete() end,
+        desc = "Delete buffer (Snacks)",
+      },
+      {
+        "<c-/>",
+        function() Snacks.terminal.toggle() end,
+        desc = "Toggle terminal",
+      },
+    },
   },
 
   --------------------------------------------------------------------------

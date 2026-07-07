@@ -693,7 +693,7 @@ require("lazy").setup({
     config = function()
       require("mini.surround").setup({
         mappings = {
-          add = "ys",
+          add = "sa",
           delete = "ds",
           replace = "cs",
           find = "",
@@ -706,7 +706,7 @@ require("lazy").setup({
         n_lines = 20,
         search_method = "cover_or_next",
       })
-      vim.keymap.set("x", "ys", "<cmd>lua MiniSurround.add('visual')<CR>")
+      vim.keymap.set("x", "sa", "<cmd>lua MiniSurround.add('visual')<CR>")
     end,
   },
 

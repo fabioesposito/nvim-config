@@ -129,9 +129,6 @@ vim.api.nvim_create_autocmd("LspAttach", {
 local lsp_capabilities = vim.lsp.protocol.make_client_capabilities()
 
 vim.lsp.config("gopls", {
-  cmd = { "gopls" },
-  filetypes = { "go", "gomod", "gowork", "gotmpl" },
-  root_markers = { "go.mod", "go.work", ".git" },
   capabilities = lsp_capabilities,
   settings = {
     gopls = {
@@ -144,9 +141,6 @@ vim.lsp.config("gopls", {
 vim.lsp.enable("gopls")
 
 vim.lsp.config("ts_ls", {
-  cmd = { "typescript-language-server", "--stdio" },
-  filetypes = { "javascript", "javascriptreact", "typescript", "typescriptreact" },
-  root_markers = { "package.json", "tsconfig.json", "jsconfig.json", ".git" },
   capabilities = lsp_capabilities,
   settings = {
     typescript = {
@@ -166,33 +160,21 @@ vim.lsp.config("ts_ls", {
 vim.lsp.enable("ts_ls")
 
 vim.lsp.config("marksman", {
-  cmd = { "marksman", "server" },
-  filetypes = { "markdown", "markdown.mdx" },
-  root_markers = { ".marksman.toml", ".git" },
   capabilities = lsp_capabilities,
 })
 vim.lsp.enable("marksman")
 
 vim.lsp.config("terraformls", {
-  cmd = { "terraform-ls", "serve" },
-  filetypes = { "terraform", "tf", "hcl" },
-  root_markers = { ".terraform", ".git" },
   capabilities = lsp_capabilities,
 })
 vim.lsp.enable("terraformls")
 
 vim.lsp.config("dockerls", {
-  cmd = { "docker-langserver", "--stdio" },
-  filetypes = { "dockerfile" },
-  root_markers = { "Dockerfile", "docker-compose.yml", ".dockerignore", ".git" },
   capabilities = lsp_capabilities,
 })
 vim.lsp.enable("dockerls")
 
 vim.lsp.config("lua_ls", {
-  cmd = { "lua-language-server" },
-  filetypes = { "lua" },
-  root_markers = { ".luarc.json", ".luarc.jsonc", ".luacheckrc", ".stylua.toml", ".git" },
   capabilities = lsp_capabilities,
   settings = {
     Lua = {
@@ -287,17 +269,31 @@ require("lazy").setup({
   -- Mason (LSP/formatter/linter installer)
   --------------------------------------------------------------------------
   {
-    "williamboman/mason.nvim",
-    build = ":MasonUpdate",
+    "mason-org/mason.nvim",
     cmd = "Mason",
+    opts = {},
+  },
+  {
+    "neovim/nvim-lspconfig",
+  },
+  {
+    "mason-org/mason-lspconfig.nvim",
+    dependencies = {
+      "mason-org/mason.nvim",
+      "neovim/nvim-lspconfig",
+    },
+    opts = {
+      automatic_enable = false,
+    },
+  },
+  {
+    "WhoIsSethDaniel/mason-tool-installer.nvim",
+    dependencies = { "mason-org/mason.nvim" },
     opts = {
       ensure_installed = {
-        -- LSP servers
         "gopls", "typescript-language-server", "marksman", "terraform-ls",
         "dockerfile-language-server", "lua-language-server",
-        -- formatters
         "gofumpt", "goimports", "prettier", "stylua",
-        -- linters
         "golangci-lint", "eslint_d", "markdownlint", "tflint", "hadolint",
       },
     },

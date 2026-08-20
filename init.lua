@@ -85,6 +85,18 @@ vim.keymap.set("n", "<leader>bn", "<cmd>bnext<CR>", { desc = "Next buffer" })
 vim.keymap.set("n", "<leader>bp", "<cmd>bprevious<CR>", { desc = "Previous buffer" })
 vim.keymap.set("n", "<leader>bo", "<cmd>%bd|e#<CR>", { desc = "Close other buffers" })
 
+-- Treesitter highlighting / indentation ---------------------------------------
+-- nvim-treesitter (main branch) does not enable features automatically.
+-- Start the built-in treesitter highlighter for any filetype that has a parser.
+vim.api.nvim_create_autocmd("FileType", {
+  group = vim.api.nvim_create_augroup("UserTreesitter", {}),
+  callback = function(args)
+    if pcall(vim.treesitter.start, args.buf) then
+      vim.bo[args.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+    end
+  end,
+})
+
 -- LSP setup (runs immediately, before any buffer loads) -----------------------
 vim.api.nvim_create_autocmd("LspAttach", {
   group = vim.api.nvim_create_augroup("UserLspConfig", {}),
@@ -239,28 +251,13 @@ require("lazy").setup({
   {
     "nvim-treesitter/nvim-treesitter",
     build = ":TSUpdate",
-    event = { "BufReadPost", "BufNewFile" },
-    cmd = { "TSInstall", "TSUpdate" },
+    lazy = false, -- upstream: plugin does not support lazy-loading
     config = function()
-      require("nvim-treesitter").setup({
-        ensure_installed = {
-          "bash", "c", "css", "dockerfile", "go", "gomod", "gosum",
-          "hcl", "html", "javascript", "json", "lua", "make", "markdown",
-          "markdown_inline", "python", "regex", "sql", "terraform",
-          "toml", "tsx", "typescript", "vim", "vimdoc", "yaml",
-        },
-        auto_install = true,
-        highlight = { enable = true },
-        indent = { enable = true },
-        incremental_selection = {
-          enable = true,
-          keymaps = {
-            init_selection = "<C-space>",
-            node_incremental = "<C-space>",
-            scope_incremental = false,
-            node_decremental = "<M-space>",
-          },
-        },
+      require("nvim-treesitter").install({
+        "bash", "c", "css", "dockerfile", "eex", "elixir", "go", "gomod",
+        "gosum", "hcl", "heex", "html", "javascript", "json", "lua", "make",
+        "markdown", "markdown_inline", "python", "regex", "sql", "terraform",
+        "toml", "tsx", "typescript", "vim", "vimdoc", "yaml",
       })
     end,
   },

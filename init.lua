@@ -42,7 +42,9 @@ vim.opt.breakindent = true
 vim.opt.swapfile = false
 vim.opt.backup = false
 vim.opt.undofile = true
-vim.opt.undodir = vim.fn.stdpath("data") .. "/undo"
+local undodir = vim.fn.stdpath("data") .. "/undo"
+vim.fn.mkdir(undodir, "p")
+vim.opt.undodir = undodir
 
 vim.opt.ignorecase = true
 vim.opt.smartcase = true
@@ -57,6 +59,14 @@ vim.opt.splitkeep = "screen"
 vim.opt.inccommand = "split"
 vim.opt.wrap = false
 vim.opt.confirm = true
+vim.opt.showmode = false -- mode is shown in lualine
+vim.opt.laststatus = 3 -- global statusline
+vim.opt.winborder = "rounded" -- rounded borders for LSP/diagnostic floats
+vim.opt.wildoptions = "pum" -- cmdline completion in a popup menu
+vim.opt.grepprg = "rg --vimgrep"
+vim.opt.grepformat = "%f:%l:%c:%m"
+vim.opt.diffopt:append("linematch:60") -- better diff alignment
+vim.g.markdown_recommended_style = 0 -- keep 2-space indent in markdown
 
 -- General keymaps ------------------------------------------------------------
 vim.keymap.set({ "n", "v" }, "<Space>", "<Nop>", { silent = true })
@@ -72,8 +82,11 @@ vim.keymap.set("v", "<", "<gv")
 vim.keymap.set("v", ">", ">gv")
 
 -- Move lines up/down in visual mode
-vim.keymap.set("v", "J", ":m '>+1<CR>gv=gv")
-vim.keymap.set("v", "K", ":m '<-2<CR>gv=gv")
+vim.keymap.set("v", "J", ":m '>+1<CR>gv=gv", { silent = true })
+vim.keymap.set("v", "K", ":m '<-2<CR>gv=gv", { silent = true })
+
+-- Exit terminal mode with a double escape (single Esc reaches the terminal app)
+vim.keymap.set("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Exit terminal mode" })
 
 -- Buffer / file operations
 vim.keymap.set("n", "<leader>w", "<cmd>write<CR>", { desc = "Save file" })
@@ -83,7 +96,26 @@ vim.keymap.set("n", "<leader>x", "<cmd>x<CR>", { desc = "Save and quit" })
 vim.keymap.set("n", "<leader>bD", "<cmd>bdelete!<CR>", { desc = "Force close buffer" })
 vim.keymap.set("n", "<leader>bn", "<cmd>bnext<CR>", { desc = "Next buffer" })
 vim.keymap.set("n", "<leader>bp", "<cmd>bprevious<CR>", { desc = "Previous buffer" })
-vim.keymap.set("n", "<leader>bo", "<cmd>%bd|e#<CR>", { desc = "Close other buffers" })
+vim.keymap.set("n", "<leader>bo", function() Snacks.bufdelete.other() end, { desc = "Close other buffers" })
+
+-- General autocmds -------------------------------------------------------------
+vim.api.nvim_create_autocmd("TextYankPost", {
+  group = vim.api.nvim_create_augroup("UserYankHighlight", { clear = true }),
+  callback = function() vim.hl.on_yank({ timeout = 200 }) end,
+  desc = "Briefly highlight yanked text",
+})
+
+vim.api.nvim_create_autocmd("BufReadPost", {
+  group = vim.api.nvim_create_augroup("UserRestoreCursor", { clear = true }),
+  callback = function(args)
+    if vim.bo[args.buf].buftype ~= "" then return end
+    local mark = vim.api.nvim_buf_get_mark(args.buf, '"')
+    if mark[1] > 0 and mark[1] <= vim.api.nvim_buf_line_count(args.buf) then
+      vim.api.nvim_win_set_cursor(0, mark)
+    end
+  end,
+  desc = "Restore cursor position when reopening a file",
+})
 
 -- Treesitter highlighting / indentation ---------------------------------------
 -- nvim-treesitter (main branch) does not enable features automatically.
@@ -97,7 +129,24 @@ vim.api.nvim_create_autocmd("FileType", {
   end,
 })
 
+-- Diagnostics ------------------------------------------------------------------
+vim.diagnostic.config({
+  severity_sort = true,
+  virtual_text = { spacing = 4, source = "if_many", prefix = "●" },
+  float = { border = "rounded", source = "if_many" },
+  signs = {
+    text = {
+      [vim.diagnostic.severity.ERROR] = "󰅚 ",
+      [vim.diagnostic.severity.WARN] = "󰀪 ",
+      [vim.diagnostic.severity.HINT] = "󰌶 ",
+      [vim.diagnostic.severity.INFO] = " ",
+    },
+  },
+})
+
 -- LSP setup (runs immediately, before any buffer loads) -----------------------
+-- Capabilities are applied to every server via vim.lsp.config("*") when
+-- cmp-nvim-lsp loads below (eagerly, before any client attaches).
 vim.api.nvim_create_autocmd("LspAttach", {
   group = vim.api.nvim_create_augroup("UserLspConfig", {}),
   callback = function(args)
@@ -113,23 +162,20 @@ vim.api.nvim_create_autocmd("LspAttach", {
     map("n", "gr", vim.lsp.buf.references, "Go to references")
     map("n", "gi", vim.lsp.buf.implementation, "Go to implementation")
     map("n", "K", vim.lsp.buf.hover, "Hover")
-    map("n", "<C-k>", vim.lsp.buf.signature_help, "Signature help")
+    -- Signature help: Neovim >= 0.11 maps insert-mode <C-s> natively.
+    -- (Normal-mode <C-k> stays free for window navigation.)
     map("n", "<leader>ca", vim.lsp.buf.code_action, "Code action")
     map("n", "<leader>cr", vim.lsp.buf.rename, "Rename")
     map("n", "<leader>cd", vim.diagnostic.open_float, "Line diagnostics")
-    map("n", "[d", vim.diagnostic.goto_prev, "Previous diagnostic")
-    map("n", "]d", vim.diagnostic.goto_next, "Next diagnostic")
+    map("n", "[d", function() vim.diagnostic.jump({ count = -1, float = true }) end, "Previous diagnostic")
+    map("n", "]d", function() vim.diagnostic.jump({ count = 1, float = true }) end, "Next diagnostic")
     map("n", "<leader>cl", "<cmd>LspInfo<CR>", "LSP info")
+    map("n", "<leader>uh", function()
+      vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled({ bufnr = bufnr }), { bufnr = bufnr })
+    end, "Toggle inlay hints")
 
-    if client:supports_method("textDocument/formatting") then
-      vim.api.nvim_create_autocmd("BufWritePre", {
-        group = vim.api.nvim_create_augroup("UserLspFormat", { clear = true }),
-        buffer = bufnr,
-        callback = function()
-          vim.lsp.buf.format({ async = false })
-        end,
-      })
-    end
+    -- Format-on-save is handled by conform.nvim (with LSP fallback), so no
+    -- BufWritePre formatting autocmd here -- it would format every file twice.
 
     if client.server_capabilities.inlayHintProvider then
       vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
@@ -137,11 +183,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
   end,
 })
 
--- Base capabilities (upgraded later when nvim-cmp loads)
-local lsp_capabilities = vim.lsp.protocol.make_client_capabilities()
-
 vim.lsp.config("gopls", {
-  capabilities = lsp_capabilities,
   settings = {
     gopls = {
       gofumpt = true,
@@ -150,10 +192,8 @@ vim.lsp.config("gopls", {
     },
   },
 })
-vim.lsp.enable("gopls")
 
 vim.lsp.config("ts_ls", {
-  capabilities = lsp_capabilities,
   settings = {
     typescript = {
       inlayHints = {
@@ -169,25 +209,10 @@ vim.lsp.config("ts_ls", {
     },
   },
 })
-vim.lsp.enable("ts_ls")
 
-vim.lsp.config("marksman", {
-  capabilities = lsp_capabilities,
-})
-vim.lsp.enable("marksman")
-
-vim.lsp.config("terraformls", {
-  capabilities = lsp_capabilities,
-})
-vim.lsp.enable("terraformls")
-
-vim.lsp.config("dockerls", {
-  capabilities = lsp_capabilities,
-})
-vim.lsp.enable("dockerls")
+-- marksman, terraformls and dockerls work with the nvim-lspconfig defaults.
 
 vim.lsp.config("lua_ls", {
-  capabilities = lsp_capabilities,
   settings = {
     Lua = {
       runtime = { version = "LuaJIT" },
@@ -197,7 +222,10 @@ vim.lsp.config("lua_ls", {
     },
   },
 })
-vim.lsp.enable("lua_ls")
+-- lazydev.nvim (below, loaded for Lua files) adds the Neovim runtime library
+-- to lua_ls for proper completion of the vim API.
+
+vim.lsp.enable({ "gopls", "ts_ls", "marksman", "terraformls", "dockerls", "lua_ls" })
 -- END LSP setup ---------------------------------------------------------------
 
 -- Plugins --------------------------------------------------------------------
@@ -213,26 +241,15 @@ require("lazy").setup({
       flavour = "mocha",
       transparent_background = false,
       integrations = {
-        aerial = true,
-        alpha = true,
         cmp = true,
-        dashboard = true,
         flash = true,
         gitsigns = true,
-        headlines = true,
-        illuminate = true,
-        indent_blankline = { enabled = true },
-        leap = true,
         lsp_trouble = true,
         mason = true,
         markdown = true,
         mini = true,
         native_lsp = { enabled = true },
-        navic = { enabled = true },
-        neotest = true,
         neo_tree = true,
-        noice = true,
-        notify = true,
         semantic_tokens = true,
         telescope = true,
         treesitter = true,
@@ -250,6 +267,7 @@ require("lazy").setup({
   --------------------------------------------------------------------------
   {
     "nvim-treesitter/nvim-treesitter",
+    branch = "main",
     build = ":TSUpdate",
     lazy = false, -- upstream: plugin does not support lazy-loading
     config = function()
@@ -273,16 +291,8 @@ require("lazy").setup({
   {
     "neovim/nvim-lspconfig",
   },
-  {
-    "mason-org/mason-lspconfig.nvim",
-    dependencies = {
-      "mason-org/mason.nvim",
-      "neovim/nvim-lspconfig",
-    },
-    opts = {
-      automatic_enable = false,
-    },
-  },
+  -- Servers are enabled manually via vim.lsp.enable() above and installed by
+  -- mason-tool-installer, so mason-lspconfig is not needed.
   {
     "WhoIsSethDaniel/mason-tool-installer.nvim",
     dependencies = { "mason-org/mason.nvim" },
@@ -300,27 +310,33 @@ require("lazy").setup({
   -- Completion
   --------------------------------------------------------------------------
   {
+    -- Loaded eagerly so completion capabilities are set via vim.lsp.config("*")
+    -- BEFORE any LSP client attaches (doing this on InsertEnter is too late).
+    "hrsh7th/cmp-nvim-lsp",
+    lazy = false,
+    config = function()
+      vim.lsp.config("*", {
+        capabilities = require("cmp_nvim_lsp").default_capabilities(),
+      })
+    end,
+  },
+  {
     "hrsh7th/nvim-cmp",
     event = "InsertEnter",
     dependencies = {
-      "hrsh7th/cmp-nvim-lsp",
       "hrsh7th/cmp-buffer",
       "hrsh7th/cmp-path",
-      "L3MON4D3/LuaSnip",
+      {
+        "L3MON4D3/LuaSnip",
+        dependencies = { "rafamadriz/friendly-snippets" },
+      },
       "saadparwaiz1/cmp_luasnip",
     },
     config = function()
       local cmp = require("cmp")
       local luasnip = require("luasnip")
 
-      -- Upgrade LSP capabilities with cmp support
-      local cmp_capabilities = require("cmp_nvim_lsp").default_capabilities(
-        vim.lsp.protocol.make_client_capabilities()
-      )
-      local servers = { "gopls", "ts_ls", "marksman", "terraformls", "dockerls", "lua_ls" }
-      for _, s in ipairs(servers) do
-        vim.lsp.config(s, { capabilities = cmp_capabilities })
-      end
+      require("luasnip.loaders.from_vscode").lazy_load()
 
       vim.keymap.set({ "i", "s" }, "<C-k>", function()
         if luasnip.expand_or_jumpable() then luasnip.expand_or_jump() end
@@ -390,16 +406,41 @@ require("lazy").setup({
     keys = {
       {
         "<leader>F",
-        function() require("conform").format({ async = true }) end,
+        function() require("conform").format({ async = true, lsp_format = "fallback" }) end,
         mode = { "n", "v" },
         desc = "Format buffer",
       },
+      {
+        "<leader>uf",
+        function()
+          vim.g.disable_autoformat = not vim.g.disable_autoformat
+          vim.notify("Format on save " .. (vim.g.disable_autoformat and "disabled" or "enabled"))
+        end,
+        desc = "Toggle format on save",
+      },
     },
+    init = function()
+      -- Use conform for gq; FormatEnable/FormatDisable toggle format-on-save
+      -- globally (FormatDisable! for the current buffer only).
+      vim.o.formatexpr = "v:lua.require'conform'.formatexpr()"
+      vim.api.nvim_create_user_command("FormatDisable", function(args)
+        if args.bang then
+          vim.b.disable_autoformat = true
+        else
+          vim.g.disable_autoformat = true
+        end
+      end, { desc = "Disable format-on-save", bang = true })
+      vim.api.nvim_create_user_command("FormatEnable", function()
+        vim.b.disable_autoformat = false
+        vim.g.disable_autoformat = false
+      end, { desc = "Re-enable format-on-save" })
+    end,
     opts = {
       format_on_save = function(bufnr)
-        -- Disable format-on-save for files with special characters, etc.
-        -- Return a table for conform to use
-        return { timeout_ms = 2000, lsp_fallback = true }
+        if vim.g.disable_autoformat or vim.b[bufnr].disable_autoformat then
+          return
+        end
+        return { timeout_ms = 2000, lsp_format = "fallback" }
       end,
       formatters_by_ft = {
         go = { "gofumpt", "goimports" },
@@ -488,10 +529,11 @@ require("lazy").setup({
   --------------------------------------------------------------------------
   {
     "nvim-telescope/telescope.nvim",
-    branch = "0.1.x",
+    branch = "master",
     dependencies = {
       "nvim-lua/plenary.nvim",
       "nvim-tree/nvim-web-devicons",
+      { "nvim-telescope/telescope-fzf-native.nvim", build = "make" },
     },
     cmd = "Telescope",
     keys = {
@@ -518,7 +560,26 @@ require("lazy").setup({
           },
         },
       },
+      pickers = {
+        find_files = {
+          -- rg is already required for live_grep; faster than find and
+          -- respects .gitignore while still showing hidden files.
+          find_command = { "rg", "--files", "--hidden", "--glob", "!.git" },
+        },
+      },
+      extensions = {
+        fzf = {
+          fuzzy = true,
+          override_generic_sorter = true,
+          override_file_sorter = true,
+          case_mode = "smart_case",
+        },
+      },
     },
+    config = function(_, opts)
+      require("telescope").setup(opts)
+      pcall(require("telescope").load_extension, "fzf")
+    end,
   },
 
   --------------------------------------------------------------------------
@@ -638,7 +699,8 @@ require("lazy").setup({
     opts = {
       preset = "modern",
       spec = {
-        -- <leader> groups
+        -- <leader> groups (only real prefixes; direct maps like <leader>w
+        -- are described by their own `desc`)
         { "<leader>b", group = "Buffers" },
         { "<leader>c", group = "Code / LSP" },
         { "<leader>f", group = "Find / Telescope" },
@@ -648,18 +710,24 @@ require("lazy").setup({
         { "<leader>s", group = "Search / Todo" },
         { "<leader>t", group = "Trouble / Terminal" },
         { "<leader>u", group = "UI" },
-        { "<leader>w", group = "Save" },
-        { "<leader>q", group = "Quit" },
-        { "<leader>Q", group = "Force quit all" },
-        { "<leader>x", group = "Save + quit" },
         -- LSP navigation (g prefix)
         { "g", group = "Go to (LSP)" },
         -- Diagnostics navigation
         { "[", group = "Previous" },
         { "]", group = "Next" },
-        -- Flash movement
-        { "s", group = "Flash jump" },
-        { "S", group = "Flash treesitter" },
+      },
+    },
+  },
+
+  --------------------------------------------------------------------------
+  -- Lua development (Neovim API completion / diagnostics via lua_ls)
+  --------------------------------------------------------------------------
+  {
+    "folke/lazydev.nvim",
+    ft = "lua",
+    opts = {
+      library = {
+        { path = "${3rd}/luv/library", words = { "vim%.uv" } },
       },
     },
   },
